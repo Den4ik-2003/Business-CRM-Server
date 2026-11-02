@@ -86,12 +86,7 @@ r.post(
     validateStockLimits(d.stock);
     const created = await withTx(async (session) => {
       const { initialStock, ...rest } = d;
-      const [product] = await Product.create([{
-        ...rest,
-        // Зберігаємо URL фотографій саме як масив рядків у MongoDB.
-        images: Array.isArray(rest.images) ? rest.images : [],
-        stock: { ...(rest.stock || {}), onHand: 0, reserved: 0 },
-      }], { session });
+      const [product] = await Product.create([{ ...rest, stock: { ...(rest.stock || {}), onHand: 0, reserved: 0 } }], { session });
       await audit(session, { entityType: "product", entityId: product._id, action: "create", changes: { name: d.name, sku: d.sku }, user: req.user });
       for (const k of ["retailPrice", "promoPrice", "minPrice"]) {
         if (d[k]) await ProductPriceHistory.create([{ product: product._id, field: k, oldValue: null, newValue: D(d[k]), changedBy: req.user._id }], { session });
@@ -117,17 +112,7 @@ r.put(
     const out = await withTx(async (session) => {
       const doc = await Product.findById(req.params.id).session(session);
       if (!doc) throw new AppError(404, "Товар не знайдено");
-      const before = {
-        ...Object.fromEntries(FLAT.map((k) => [
-          k,
-          k === "images"
-            ? (Array.isArray(doc[k]) ? [...doc[k]] : [])
-            : (doc[k] == null ? null : String(doc[k])),
-        ])),
-        costs: plainCosts(doc.costs),
-        ...Object.fromEntries(PRICE_FIELDS.map((k) => [k, dec(doc[k])])),
-        stock: { min: doc.stock.min, max: doc.stock.max, reorderQty: doc.stock.reorderQty, inTransit: doc.stock.inTransit, leadTimeDays: doc.stock.leadTimeDays },
-      };
+      const before = { ...Object.fromEntries(FLAT.map((k) => [k, doc[k] == null ? null : String(doc[k])])), costs: plainCosts(doc.costs), ...Object.fromEntries(PRICE_FIELDS.map((k) => [k, dec(doc[k])])), stock: { min: doc.stock.min, max: doc.stock.max, reorderQty: doc.stock.reorderQty, inTransit: doc.stock.inTransit, leadTimeDays: doc.stock.leadTimeDays } };
 
       validatePrices({ retailPrice: d.retailPrice !== undefined ? d.retailPrice : dec(doc.retailPrice), promoPrice: d.promoPrice !== undefined ? d.promoPrice : dec(doc.promoPrice), minPrice: d.minPrice !== undefined ? d.minPrice : dec(doc.minPrice) });
       validateStockLimits({ ...before.stock, ...(d.stock || {}) });
@@ -135,10 +120,7 @@ r.put(
       const changes = {};
       for (const k of FLAT) if (d[k] !== undefined) {
         const nv = d[k] === "" ? null : d[k];
-        const unchanged = k === "images"
-          ? JSON.stringify(before[k] ?? []) === JSON.stringify(nv ?? [])
-          : (before[k] ?? null) === (nv === null ? null : String(nv));
-        if (!unchanged) { changes[k] = { from: before[k], to: nv }; doc.set(k, nv); }
+        if ((before[k] ?? null) !== (nv === null ? null : String(nv))) { changes[k] = { from: before[k], to: nv }; doc.set(k, nv); }
       }
       for (const k of PRICE_FIELDS) if (d[k] !== undefined && toCents(d[k]) !== toCents(before[k])) {
         changes[k] = { from: before[k], to: d[k] };

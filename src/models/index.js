@@ -42,6 +42,8 @@ export const Attachment = make("Attachment", {
   kind: { type: String, enum: ["photo", "document"], default: "document" },
   originalName: String,
   storedName: String,
+  external: { type: Boolean, default: false },
+  url: String,
   mimeType: String,
   size: Number,
   uploadedBy: ref("User"),

@@ -22,7 +22,12 @@ const upload = multer({
 });
 
 const r = Router();
-const ser = (a) => ({ id: String(a._id), kind: a.kind, name: a.originalName, mimeType: a.mimeType, size: a.size, at: a.createdAt, url: `/api/attachments/${a._id}/file` });
+const ser = (a) => ({
+  id: String(a._id), kind: a.kind, name: a.originalName, mimeType: a.mimeType,
+  size: a.size, at: a.createdAt,
+  // Для зовнішніх зображень повертаємо URL Cloudinary, для локальних — endpoint файлу.
+  url: a.external && a.url ? a.url : `/api/attachments/${a._id}/file`,
+});
 
 r.get("/", wrap(async (req, res) => {
   const q = z.object({ entityType: z.literal("product"), entityId: z.string().regex(/^[a-f\d]{24}$/i) }).parse(req.query);
@@ -31,12 +36,29 @@ r.get("/", wrap(async (req, res) => {
 
 r.post("/", canWrite, upload.single("file"), wrap(async (req, res) => {
   const f = req.file;
+  const base = z.object({
+    entityType: z.literal("product"),
+    entityId: z.string().regex(/^[a-f\d]{24}$/i),
+    kind: z.enum(["photo", "document"]).default("document"),
+  }).parse(req.body);
+
+  if (!(await Product.exists({ _id: base.entityId }))) throw new AppError(404, "Товар не знайдено");
+
+  // Cloudinary-фото вже завантажене за URL: не вимагати повторного вибору локального файлу.
+  if (req.body.external === true || req.body.external === "true") {
+    const d = z.object({ url: z.string().url(), name: z.string().trim().min(1).max(255).optional(), size: z.coerce.number().nonnegative().optional() }).parse(req.body);
+    if (base.kind !== "photo") throw new AppError(400, "За посиланням можна додати лише фото");
+    const a = await Attachment.create({
+      ...base, external: true, url: d.url, originalName: d.name || "Зображення",
+      mimeType: "image/*", size: d.size || 0, uploadedBy: req.user._id,
+    });
+    return res.status(201).json(ser(a));
+  }
+
   if (!f) throw new AppError(400, "Оберіть файл");
   try {
-    const d = z.object({ entityType: z.literal("product"), entityId: z.string().regex(/^[a-f\d]{24}$/i), kind: z.enum(["photo", "document"]).default("document") }).parse(req.body);
-    if (d.kind === "photo" && !f.mimetype.startsWith("image/")) throw new AppError(400, "Фото має бути зображенням");
-    if (!(await Product.exists({ _id: d.entityId }))) throw new AppError(404, "Товар не знайдено");
-    const a = await Attachment.create({ ...d, originalName: Buffer.from(f.originalname, "latin1").toString("utf8"), storedName: f.filename, mimeType: f.mimetype, size: f.size, uploadedBy: req.user._id });
+    if (base.kind === "photo" && !f.mimetype.startsWith("image/")) throw new AppError(400, "Фото має бути зображенням");
+    const a = await Attachment.create({ ...base, originalName: Buffer.from(f.originalname, "latin1").toString("utf8"), storedName: f.filename, mimeType: f.mimetype, size: f.size, uploadedBy: req.user._id });
     res.status(201).json(ser(a));
   } catch (e) {
     fs.promises.unlink(f.path).catch(() => {});
@@ -55,7 +77,7 @@ r.get("/:id/file", wrap(async (req, res) => {
 r.delete("/:id", canWrite, wrap(async (req, res) => {
   const a = await Attachment.findByIdAndDelete(req.params.id);
   if (!a) throw new AppError(404, "Файл не знайдено");
-  fs.promises.unlink(path.join(UPLOAD_DIR, a.storedName)).catch(() => {});
+  if (!a.external && a.storedName) fs.promises.unlink(path.join(UPLOAD_DIR, a.storedName)).catch(() => {});
   res.json({ ok: true });
 }));
 
