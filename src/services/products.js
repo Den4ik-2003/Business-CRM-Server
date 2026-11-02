@@ -87,7 +87,18 @@ export const productSchema = z.object({
   supplier: idField,
   warehouse: idField,
   description: text(5000),
-  images: z.array(z.string().url()).max(20).optional(),
+  // Приймаємо як масив URL, так і одне посилання: нормалізуємо до масиву
+  // перед валідацією, щоб посилання не губилися при створенні/редагуванні товару.
+  images: z.preprocess(
+    (value) => {
+      if (value == null || value === "") return undefined;
+      const list = Array.isArray(value) ? value : [value];
+      return list
+        .map((item) => (typeof item === "string" ? item.trim() : item))
+        .filter((item) => item !== "");
+    },
+    z.array(z.string().url()).max(20).optional()
+  ),
   status: z.enum(["active", "inactive", "archived"]).optional(),
   costs: z.object(Object.fromEntries(COST_KEYS.map((k) => [k, moneyField]))).partial().optional(),
   retailPrice: moneyField,
