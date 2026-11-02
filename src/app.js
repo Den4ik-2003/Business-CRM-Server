@@ -7,6 +7,8 @@ import auth from "./routes/auth.js";
 import users from "./routes/users.js";
 import products from "./routes/products.js";
 import inventory from "./routes/inventory.js";
+import sales from "./routes/sales.js";
+import expenses from "./routes/expenses.js";
 import attachments from "./routes/attachments.js";
 import { categories, suppliers, warehouses } from "./routes/reference.js";
 
@@ -34,6 +36,8 @@ export function createApp() {
   app.use("/api/users", ownerOnly, users);
   app.use("/api/products", products);
   app.use("/api/inventory", inventory);
+  app.use("/api/sales", sales);
+  app.use("/api/expenses", expenses);
   app.use("/api/attachments", attachments);
   app.use("/api/categories", categories);
   app.use("/api/suppliers", suppliers);

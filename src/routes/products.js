@@ -101,7 +101,7 @@ r.post(
 );
 
 const PRICE_FIELDS = ["retailPrice", "promoPrice", "minPrice"];
-const FLAT = ["name", "sku", "barcode", "category", "subcategory", "brand", "supplier", "warehouse", "description", "status"];
+const FLAT = ["name", "sku", "barcode", "category", "subcategory", "brand", "supplier", "warehouse", "description", "images", "status"];
 
 r.put(
   "/:id",

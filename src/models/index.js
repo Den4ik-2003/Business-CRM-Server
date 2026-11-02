@@ -57,6 +57,7 @@ export const Product = make("Product", {
   brand: { type: String, trim: true },
   supplier: ref("Supplier", { default: null }),
   description: String,
+  images: { type: [String], default: [] },
   status: { type: String, enum: ["active", "inactive", "archived"], default: "active" },
   costs: {
     purchasePrice: D,
@@ -150,3 +151,34 @@ export const AppSetting = make("AppSetting", {
 });
 
 export { Types };
+
+
+export const Expense = make("Expense", {
+  product: ref("Product", { default: null }),
+  title: { type: String, required: true, trim: true },
+  type: { type: String, enum: ["advertising", "shipping", "packaging", "purchase", "other"], default: "other" },
+  amount: { type: D, required: true },
+  currency: { type: String, default: "UAH" },
+  date: { type: Date, default: Date.now },
+  note: String,
+  user: ref("User"),
+}, { collection: "expenses" });
+Expense.schema.index({ product: 1, date: -1 });
+Expense.schema.index({ date: -1 });
+
+export const Sale = make("Sale", {
+  items: [{
+    product: ref("Product", { required: true }),
+    quantity: { type: Number, required: true, min: 1 },
+    unitPrice: { type: D, required: true },
+    unitCost: D,
+    total: { type: D, required: true },
+  }],
+  total: { type: D, required: true },
+  currency: { type: String, default: "UAH" },
+  date: { type: Date, default: Date.now },
+  note: String,
+  status: { type: String, enum: ["completed", "cancelled"], default: "completed" },
+  user: ref("User"),
+}, { collection: "sales" });
+Sale.schema.index({ date: -1 });
