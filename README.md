@@ -25,7 +25,7 @@ npm test                    # тести бізнес-логіки
 | `JWT_SECRET` | випадковий рядок від 32 символів |
 | `NODE_ENV` | `production` |
 | `CLIENT_ORIGIN` | адреса фронтенду, напр. `https://my-shop.netlify.app` |
-| `CROSS_SITE` | `true`, якщо фронтенд і API на різних доменах без проксі |
+| `CROSS_SITE` | `true`, якщо фронтенд і API на різних доменах без проксі (для cookie потрібні HTTPS і дозволений `CLIENT_ORIGIN`) |
 | `UPLOAD_DIR` | шлях постійного диска для файлів |
 
 4. **Одноразово** (у консолі сервісу або локально з тими самими змінними): `npm run migrate`, потім `npm run seed:admin` з `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
@@ -45,7 +45,9 @@ npm test                    # тести бізнес-логіки
 Фото й документи зберігаються в `UPLOAD_DIR` на диску. На безкоштовних планах диск стирається при перезапуску — підключіть постійний диск або попросіть мене перенести файли у S3/R2.
 
 ## API
-`/api/auth/login|logout|me` · `/api/products` (+ `/:id`, `/:id/archive|restore|history`) · `/api/inventory/movements|alerts` · `/api/attachments` · `/api/categories|suppliers|warehouses` · `/api/users` (лише owner). Усе, крім `/api/health` і входу, потребує сесії.
+`/api/auth/login|logout|me` · `/api/products` (+ `/:id`, `/:id/archive|restore|history`) · `/api/inventory/movements|alerts` · `/api/attachments` · `/api/categories|suppliers|warehouses` · `/api/users` (лише owner). Усе, крім `/api/health` і входу, потребує сесії. Сервер підтримує два способи авторизації:
+- cookie `bos_token` (за замовчуванням);
+- `Authorization: Bearer <token>` — корисно для мобільних браузерів/деплоїв, де сторонні cookie блокуються. `/api/auth/login` повертає `token` у JSON разом із `user`; фронтенд має зберегти його безпечно та додавати заголовок `Authorization` до API-запитів. Не надсилайте токен у URL.
 
 Ролі: `owner` (усе), `manager` (змінює дані), `viewer` (лише читає).
 

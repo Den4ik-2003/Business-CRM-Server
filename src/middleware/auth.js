@@ -17,7 +17,11 @@ export const cookieOptions = {
 
 export async function requireAuth(req, _res, next) {
   try {
-    const token = req.cookies?.[COOKIE];
+    // Cookies are convenient for same-site deployments; Bearer also works when
+    // mobile browsers block cross-site cookies or the frontend uses token auth.
+    const authorization = req.get("authorization") || "";
+    const bearer = authorization.match(/^Bearer\\s+(.+)$/i)?.[1];
+    const token = req.cookies?.[COOKIE] || bearer;
     if (!token) throw new AppError(401, "Потрібно увійти в систему");
     let payload;
     try {
