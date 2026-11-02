@@ -1,0 +1,41 @@
+import { Router } from "express";
+import bcrypt from "bcryptjs";
+import { z } from "zod";
+import { User } from "../models/index.js";
+import { AppError, wrap } from "../lib/errors.js";
+
+const r = Router(); // доступ лише власнику (підключено в app.js)
+const pub = (u) => ({ id: String(u._id), email: u.email, name: u.name, role: u.role, active: u.active });
+const role = z.enum(["owner", "manager", "viewer"]);
+
+r.get("/", wrap(async (_q, res) => res.json({ items: (await User.find().sort({ createdAt: 1 })).map(pub) })));
+
+r.post(
+  "/",
+  wrap(async (req, res) => {
+    const d = z
+      .object({ email: z.string().email(), name: z.string().trim().min(1), password: z.string().min(8, "Пароль щонайменше 8 символів"), role })
+      .parse(req.body);
+    const user = await User.create({ ...d, passwordHash: await bcrypt.hash(d.password, 10) });
+    res.status(201).json(pub(user));
+  })
+);
+
+r.patch(
+  "/:id",
+  wrap(async (req, res) => {
+    const d = z.object({ name: z.string().trim().min(1), role, active: z.boolean(), password: z.string().min(8) }).partial().parse(req.body);
+    const user = await User.findById(req.params.id);
+    if (!user) throw new AppError(404, "Користувача не знайдено");
+    if (String(user._id) === String(req.user._id) && (d.active === false || (d.role && d.role !== "owner")))
+      throw new AppError(400, "Не можна знизити власні права чи вимкнути себе");
+    if (d.name) user.name = d.name;
+    if (d.role) user.role = d.role;
+    if (d.active !== undefined) user.active = d.active;
+    if (d.password) user.passwordHash = await bcrypt.hash(d.password, 10);
+    await user.save();
+    res.json(pub(user));
+  })
+);
+
+export default r;

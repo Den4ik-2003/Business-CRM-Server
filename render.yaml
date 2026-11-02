@@ -1,0 +1,20 @@
+# Render Blueprint. MONGODB_URI та ADMIN_* задайте вручну в панелі Render (sync: false).
+services:
+  - type: web
+    name: business-os-api
+    runtime: node
+    rootDir: .
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MONGODB_URI
+        sync: false
+      - key: CLIENT_ORIGIN
+        sync: false
+      - key: CROSS_SITE
+        value: "false"
