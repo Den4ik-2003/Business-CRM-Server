@@ -41,6 +41,8 @@ export async function applyInSession(session, p) {
     throw new AppError(409, `Недостатньо доступного залишку: доступно ${before - reservedBefore}`);
 
   const set = { "stock.onHand": after, "stock.reserved": reservedAfter };
+  if (after <= 0 && before > 0) set.outOfStockSince = new Date();
+  if (after > 0) set.outOfStockSince = null;
   if (p.type === "sale") set.lastSaleAt = new Date();
   if (p.type === "purchase_receipt") set.lastPurchaseAt = new Date();
   await Product.updateOne({ _id: product._id }, { $set: set }, { session });

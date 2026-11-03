@@ -193,4 +193,13 @@ r.get(
   })
 );
 
+
+r.patch("/:id/favorite", canWrite, wrap(async (req, res) => {
+  const doc = await Product.findById(req.params.id);
+  if (!doc) throw new AppError(404, "Товар не знайдено");
+  doc.isFavorite = !!req.body.favorite;
+  await doc.save();
+  res.json({ id: String(doc._id), isFavorite: doc.isFavorite });
+}));
+
 export default r;

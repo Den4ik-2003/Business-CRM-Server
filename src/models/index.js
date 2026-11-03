@@ -84,6 +84,8 @@ export const Product = make("Product", {
   warehouse: ref("Warehouse", { default: null }),
   lastPurchaseAt: Date,
   lastSaleAt: Date,
+  isFavorite: { type: Boolean, default: false },
+  outOfStockSince: Date,
 });
 Product.schema.index({ barcode: 1 }, { sparse: true });
 Product.schema.index({ status: 1, category: 1 });
@@ -180,7 +182,13 @@ export const Sale = make("Sale", {
   currency: { type: String, default: "UAH" },
   date: { type: Date, default: Date.now },
   note: String,
-  status: { type: String, enum: ["completed", "cancelled"], default: "completed" },
+  status: { type: String, enum: ["new", "shipped", "at_branch", "collected", "refused", "completed", "cancelled"], default: "new" },
+  channel: { type: String, default: "Інший" },
+  shippedAt: Date,
+  reminderAt: Date,
+  reminderCount: { type: Number, default: 0 },
+  collectedAt: Date,
+  stockDeducted: { type: Boolean, default: false },
   user: ref("User"),
 }, { collection: "sales" });
 Sale.schema.index({ date: -1 });

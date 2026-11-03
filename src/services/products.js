@@ -22,7 +22,7 @@ export function serializeProduct(p) {
     warehouse: ref(p.warehouse),
     description: p.description || "",
     images: Array.isArray(p.images) ? p.images : [],
-    status: p.status,
+    status: p.status, isFavorite: !!p.isFavorite,
     costs,
     retailPrice,
     promoPrice: dec(p.promoPrice),

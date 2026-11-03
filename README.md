@@ -58,3 +58,12 @@ npm test                    # тести бізнес-логіки
 ## Business CRM feature set
 
 This server package retains the existing authenticated API for products, SKU/barcode search, categories/subcategories, stock movements, price history, attachments, sales, expenses, and analytics. The frontend package adds product ranking/search presentation, printable Code 39 labels, and a persistent light/dark theme toggle. The barcode label uses Code 39 and is generated from the product barcode (SKU fallback).
+
+
+## Додатково: замовлення та облік
+- Продаж створюється зі статусом «Нове» без списання залишку.
+- Фоновий таймер переводить нові продажі у «Відправлено» приблизно через 2,5 години.
+- Після отримання покупцем товар списується зі складу через журнал рухів; відмова не списує залишок.
+- Нагадування для статусів «Відправлено» та «Ще у відділенні» повторюються кожні 3 дні, доки статус не змінено.
+- Канал продажу зберігається окремо та агрегується в `/api/sales/analytics/summary`.
+- Для товарів доступні обране та дата переходу залишку в нуль для нагадування через 3 дні.
