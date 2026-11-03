@@ -53,3 +53,8 @@ npm test                    # тести бізнес-логіки
 
 ## Статус перевірки
 Тести логіки, завантаження сервера й валідація запитів перевірені. Транзакції та запити до бази не запускалися на живій MongoDB — перший запуск її покаже.
+
+
+## Business CRM feature set
+
+This server package retains the existing authenticated API for products, SKU/barcode search, categories/subcategories, stock movements, price history, attachments, sales, expenses, and analytics. The frontend package adds product ranking/search presentation, printable Code 39 labels, and a persistent light/dark theme toggle. The barcode label uses Code 39 and is generated from the product barcode (SKU fallback).
