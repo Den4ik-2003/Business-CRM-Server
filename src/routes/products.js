@@ -24,6 +24,7 @@ const listQuery = z.object({
   category: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   supplier: z.string().regex(/^[a-f\d]{24}$/i).optional(),
   stock: z.enum(["in", "low", "out"]).optional(),
+  favorite: z.enum(["true", "false"]).optional(),
   priceMin: z.string().optional(),
   priceMax: z.string().optional(),
   sort: z.enum(["name", "sku", "retailPrice", "onHand", "updatedAt", "createdAt"]).default("updatedAt"),
@@ -42,6 +43,7 @@ export function buildFilter(q) {
     const rx = new RegExp(esc(q.q), "i");
     and.push({ $or: [{ name: rx }, { sku: rx }, { barcode: rx }, { brand: rx }] });
   }
+  if (q.favorite === "true") and.push({ isFavorite: true });
   if (q.category) and.push({ category: q.category });
   if (q.supplier) and.push({ supplier: q.supplier });
   if (q.stock === "out") and.push({ $expr: { $lte: [AVAIL, 0] } });
@@ -194,6 +196,11 @@ r.get(
 );
 
 
+r.post("/:id/interest", wrap(async (req, res) => {
+  const product = await Product.findByIdAndUpdate(req.params.id, { $inc: { interestCount: 1 } }, { new: true }).select("interestCount");
+  if (!product) throw new AppError(404, "Товар не знайдено");
+  res.json({ interestCount: product.interestCount });
+}));
 r.patch("/:id/favorite", canWrite, wrap(async (req, res) => {
   const doc = await Product.findById(req.params.id);
   if (!doc) throw new AppError(404, "Товар не знайдено");

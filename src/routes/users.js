@@ -5,10 +5,21 @@ import { User } from "../models/index.js";
 import { AppError, wrap } from "../lib/errors.js";
 
 const r = Router(); // доступ лише власнику (підключено в app.js)
-const pub = (u) => ({ id: String(u._id), email: u.email, name: u.name, role: u.role, active: u.active });
+const pub = (u) => ({ id: String(u._id), email: u.email, name: u.name, role: u.role, active: u.active, approvalStatus: u.approvalStatus || "approved" });
 const role = z.enum(["owner", "manager", "viewer"]);
 
 r.get("/", wrap(async (_q, res) => res.json({ items: (await User.find().sort({ createdAt: 1 })).map(pub) })));
+r.get("/pending", wrap(async (_q, res) => res.json({ items: (await User.find({ approvalStatus: "pending" }).sort({ createdAt: 1 })).map(pub) })));
+r.patch("/:id/approval", wrap(async (req, res) => {
+  const d = z.object({ decision: z.enum(["approve", "reject"]) }).parse(req.body);
+  const user = await User.findById(req.params.id);
+  if (!user) throw new AppError(404, "Користувача не знайдено");
+  if (user.role === "owner") throw new AppError(400, "Не можна змінювати доступ власника");
+  user.approvalStatus = d.decision === "approve" ? "approved" : "rejected";
+  user.active = d.decision === "approve";
+  await user.save();
+  res.json(pub(user));
+}));
 
 r.post(
   "/",

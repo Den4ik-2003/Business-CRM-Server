@@ -11,6 +11,7 @@ export const User = make("User", {
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ["owner", "manager", "viewer"], default: "viewer" },
   active: { type: Boolean, default: true },
+  approvalStatus: { type: String, enum: ["approved", "pending", "rejected"], default: "approved" },
 });
 
 export const Category = make("Category", {
@@ -85,6 +86,7 @@ export const Product = make("Product", {
   lastPurchaseAt: Date,
   lastSaleAt: Date,
   isFavorite: { type: Boolean, default: false },
+  interestCount: { type: Number, default: 0 },
   outOfStockSince: Date,
 });
 Product.schema.index({ barcode: 1 }, { sparse: true });
@@ -183,6 +185,7 @@ export const Sale = make("Sale", {
   date: { type: Date, default: Date.now },
   note: String,
   status: { type: String, enum: ["new", "shipped", "at_branch", "collected", "refused", "completed", "cancelled"], default: "new" },
+  statusManuallySet: { type: Boolean, default: false },
   channel: { type: String, default: "Інший" },
   shippedAt: Date,
   reminderAt: Date,
