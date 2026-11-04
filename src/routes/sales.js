@@ -6,7 +6,7 @@ import { canWrite } from "../middleware/auth.js";
 import { applyMovement } from "../services/inventory.js";
 import { dec } from "../lib/money.js";
 const r = Router();
-const oid = z.string().regex(/^[a-f\\d]{24}$/i);
+const oid = z.string().regex(/^[a-f\d]{24}$/i);
 const STATUSES = ["new","shipped","at_branch","collected","refused"];
 const serialize = s => ({ id:String(s._id), items:s.items.map(i=>({product:i.product?._id?{id:String(i.product._id),name:i.product.name,sku:i.product.sku}:{id:String(i.product)},quantity:i.quantity,unitPrice:dec(i.unitPrice),unitCost:dec(i.unitCost),total:dec(i.total)})),total:dec(s.total),currency:s.currency,date:s.date,note:s.note||"",status:s.status,channel:s.channel||"Інший",shippedAt:s.shippedAt||null,reminderAt:s.reminderAt||null,reminderCount:s.reminderCount||0,stockDeducted:!!s.stockDeducted, user:s.user?{id:String(s.user._id||s.user),name:s.user.name||""}:null, statusManuallySet:!!s.statusManuallySet });
 async function markCollected(sale, user) {
@@ -29,9 +29,26 @@ r.post("/",canWrite,wrap(async(req,res)=>{
  await sale.populate("items.product","name sku");res.status(201).json({sale:serialize(sale)});
 }));
 r.patch("/:id/status",canWrite,wrap(async(req,res)=>{
- const d=z.object({status:z.enum(STATUSES)}).parse(req.body);const sale=await Sale.findById(req.params.id);if(!sale || (req.user.role!=="owner" && String(sale.user)!==String(req.user._id))) return res.status(404).json({error:"Продаж не знайдено"});
- sale.statusManuallySet=true; if(d.status==="collected"){await markCollected(sale,req.user); sale.statusManuallySet=true; await sale.save();}else{sale.status=d.status;if(d.status==="shipped"){sale.shippedAt=new Date();sale.reminderAt=new Date(Date.now()+2*86400000);}if(d.status==="at_branch")sale.reminderAt=new Date(Date.now()+2*86400000);if(d.status==="refused")sale.reminderAt=null;await sale.save();}
- await sale.populate("items.product","name sku");res.json({sale:serialize(sale)});
+ const d=z.object({status:z.enum(STATUSES)}).parse(req.body);
+ if (!/^[a-f\d]{24}$/i.test(req.params.id)) return res.status(400).json({error:"Некоректний номер продажу"});
+ const scope = req.user.role === "owner" ? { _id: req.params.id } : { _id: req.params.id, user: req.user._id };
+ let sale = await Sale.findOne(scope);
+ if (!sale) return res.status(404).json({error:"Продаж не знайдено або немає прав на його зміну"});
+ if (d.status === "collected") {
+   await markCollected(sale, req.user);
+   sale.statusManuallySet = true;
+   await sale.save();
+ } else {
+   const now = new Date();
+   const update = { status: d.status, statusManuallySet: true };
+   if (d.status === "shipped") { update.shippedAt = now; update.reminderAt = new Date(now.getTime() + 2 * 86400000); }
+   else if (d.status === "at_branch") update.reminderAt = new Date(now.getTime() + 2 * 86400000);
+   else if (d.status === "refused") update.reminderAt = null;
+   sale = await Sale.findOneAndUpdate(scope, { $set: update }, { new: true, runValidators: true });
+   if (!sale) return res.status(404).json({error:"Продаж не знайдено або немає прав на його зміну"});
+ }
+ await sale.populate("items.product","name sku");
+ res.json({sale:serialize(sale)});
 }));
 r.get("/notifications",wrap(async(req,res)=>{
  const now=new Date();const scope = req.user.role === "owner" ? {} : { user: req.user._id }; const due=await Sale.find({ ...scope, status:{$in:["shipped","at_branch"]},reminderAt:{$lte:now}}).sort({reminderAt:1}).limit(100).populate("items.product","name sku");
