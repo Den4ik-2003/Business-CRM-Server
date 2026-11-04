@@ -196,8 +196,9 @@ r.get(
 );
 
 
-r.post("/:id/interest", wrap(async (req, res) => {
+r.post("/:id/interest", canWrite, wrap(async (req, res) => {
   const product = await Product.findByIdAndUpdate(req.params.id, { $inc: { interestCount: 1 } }, { new: true }).select("interestCount");
+  if (!product) throw new AppError(404, "Товар не знайдено");
   if (!product) throw new AppError(404, "Товар не знайдено");
   res.json({ interestCount: product.interestCount });
 }));

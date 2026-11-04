@@ -32,6 +32,15 @@ r.post(
   })
 );
 
+r.delete("/:id", wrap(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new AppError(404, "Користувача не знайдено");
+  if (user.role === "owner") throw new AppError(400, "Обліковий запис адміністратора видалити не можна");
+  if (String(user._id) === String(req.user._id)) throw new AppError(400, "Не можна видалити власний обліковий запис");
+  await user.deleteOne();
+  res.json({ ok: true });
+}));
+
 r.patch(
   "/:id",
   wrap(async (req, res) => {
