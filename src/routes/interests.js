@@ -64,11 +64,38 @@ r.post("/:productId", canWrite, wrap(async (req,res) => {
   res.status(201).json({item:{id:String(doc._id),product:{id:String(product._id),name:product.name},level:out(level),channel:out(channel),comment:doc.comment,recordedAt:doc.recordedAt},...rating});
 }));
 
+r.patch("/:productId/:interestId", canWrite, wrap(async (req,res) => {
+  if (!mongoose.isValidObjectId(req.params.productId) || !mongoose.isValidObjectId(req.params.interestId)) throw new AppError(400,"Некоректний ідентифікатор");
+  const body = z.object({
+    level: id,
+    channel: id,
+    comment: z.string().trim().max(1000).optional().default(""),
+    recordedAt: z.coerce.date()
+  }).parse(req.body);
+  const [doc, level, channel] = await Promise.all([
+    ProductInterest.findOne({_id:req.params.interestId, product:req.params.productId}),
+    InterestLevel.findOne({_id:body.level, active:true}),
+    InterestChannel.findOne({_id:body.channel, active:true})
+  ]);
+  if (!doc) throw new AppError(404,"Зацікавленість не знайдено");
+  if (!level) throw new AppError(400,"Оберіть доступний рівень зацікавленості");
+  if (!channel) throw new AppError(400,"Оберіть доступний канал");
+  doc.level = level._id;
+  doc.channel = channel._id;
+  doc.weight = level.weight;
+  doc.comment = body.comment;
+  doc.recordedAt = body.recordedAt;
+  await doc.save();
+  const rating = await calcRating(req.params.productId);
+  await Product.updateOne({_id:req.params.productId}, { $set:{interestCount:rating.interestCount} });
+  res.json({ok:true,...rating});
+}));
+
 r.get("/:productId", wrap(async (req,res) => {
   if (!mongoose.isValidObjectId(req.params.productId)) throw new AppError(400,"Некоректний товар");
   const rows = await ProductInterest.find({product:req.params.productId}).sort({recordedAt:-1}).populate("level","name weight").populate("channel","name").populate("createdBy","name").lean();
   const rating = await calcRating(req.params.productId);
-  res.json({items:rows.map(x=>({id:String(x._id),level:x.level?.name||"Видалений рівень",weight:x.weight,channel:x.channel?.name||"Видалений канал",comment:x.comment||"",recordedAt:x.recordedAt,createdBy:x.createdBy?.name||null})),...rating});
+  res.json({items:rows.map(x=>({id:String(x._id),levelId:x.level?._id?String(x.level._id):"",channelId:x.channel?._id?String(x.channel._id):"",level:x.level?.name||"Видалений рівень",weight:x.weight,channel:x.channel?.name||"Видалений канал",comment:x.comment||"",recordedAt:x.recordedAt,createdBy:x.createdBy?.name||null})),...rating});
 }));
 
 r.get("/analytics/summary", wrap(async (req,res) => {
