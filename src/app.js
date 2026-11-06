@@ -11,6 +11,7 @@ import sales from "./routes/sales.js";
 import expenses from "./routes/expenses.js";
 import attachments from "./routes/attachments.js";
 import { categories, suppliers, warehouses } from "./routes/reference.js";
+import interests, { interestLevels, interestChannels } from "./routes/interests.js";
 
 export function createApp() {
   const app = express();
@@ -42,6 +43,9 @@ export function createApp() {
   app.use("/api/categories", categories);
   app.use("/api/suppliers", suppliers);
   app.use("/api/warehouses", warehouses);
+  app.use("/api/interest-levels", interestLevels);
+  app.use("/api/interest-channels", interestChannels);
+  app.use("/api/interests", interests);
   app.use(notFound);
   app.use(errorHandler);
   return app;

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
-import { Product, InventoryMovement, AuditLog, ProductPriceHistory, Attachment } from "../models/index.js";
+import { Product, InventoryMovement, AuditLog, ProductPriceHistory, Attachment, ProductInterest } from "../models/index.js";
 import { AppError, wrap } from "../lib/errors.js";
 import { canWrite, ownerOnly } from "../middleware/auth.js";
 import { withTx } from "../lib/tx.js";
@@ -64,7 +64,16 @@ r.get(
       Product.countDocuments(filter),
       Product.find(filter).sort(sort).skip((q.page - 1) * q.limit).limit(q.limit).populate(POPULATE).lean(),
     ]);
-    res.json({ items: docs.map(serializeProduct), total, page: q.page, pages: Math.max(1, Math.ceil(total / q.limit)) });
+    const ids = docs.map(d => d._id);
+    const stats = await ProductInterest.aggregate([{ $match: { product: { $in: ids } } }, { $group: { _id: "$product", count: { $sum: 1 }, avgWeight: { $avg: "$weight" } } }]);
+    const statMap = new Map(stats.map(x => [String(x._id), x]));
+    const items = docs.map(doc => {
+      const item = serializeProduct(doc), stat = statMap.get(String(doc._id));
+      item.interestCount = stat?.count || 0;
+      item.popularityRating = stat ? Math.max(1, Math.min(5, Math.round(1 + (stat.avgWeight / 100) * 3 + Math.min(1, Math.log1p(stat.count) / Math.log(11))))) : null;
+      return item;
+    });
+    res.json({ items, total, page: q.page, pages: Math.max(1, Math.ceil(total / q.limit)) });
   })
 );
 
@@ -75,6 +84,9 @@ r.get(
     if (!doc) throw new AppError(404, "Товар не знайдено");
     const product = serializeProduct(doc);
     const rate = await salesRate(doc._id, doc.createdAt);
+    const [stats] = await ProductInterest.aggregate([{ $match: { product: doc._id } }, { $group: { _id: null, count: { $sum: 1 }, avgWeight: { $avg: "$weight" } } }]);
+    product.interestCount = stats?.count || 0;
+    product.popularityRating = stats ? Math.max(1, Math.min(5, Math.round(1 + (stats.avgWeight / 100) * 3 + Math.min(1, Math.log1p(stats.count) / Math.log(11))))) : null;
     res.json({ product, analytics: stockAnalytics(product, rate) });
   })
 );
@@ -170,6 +182,8 @@ r.delete(
   wrap(async (req, res) => {
     // Видалити можна лише товар без руху (крім початкового залишку). Решту — архівувати, щоб не втратити історію.
     const used = await InventoryMovement.exists({ product: req.params.id, type: { $ne: "initial" } });
+    const hasInterest = await ProductInterest.exists({ product: req.params.id });
+    if (hasInterest) throw new AppError(409, "У товару є історія зацікавленості. Архівуйте його замість видалення");
     if (used) throw new AppError(409, "У товару є історія складських операцій. Архівуйте його замість видалення");
     await withTx(async (session) => {
       const doc = await Product.findByIdAndDelete(req.params.id, { session });

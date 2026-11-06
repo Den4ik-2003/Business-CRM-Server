@@ -195,3 +195,32 @@ export const Sale = make("Sale", {
   user: ref("User"),
 }, { collection: "sales" });
 Sale.schema.index({ date: -1 });
+
+
+export const InterestLevel = make("InterestLevel", {
+  name: { type: String, required: true, trim: true, unique: true },
+  weight: { type: Number, required: true, min: 0, max: 100, default: 1 },
+  active: { type: Boolean, default: true },
+});
+InterestLevel.schema.index({ name: 1 }, { unique: true });
+
+export const InterestChannel = make("InterestChannel", {
+  name: { type: String, required: true, trim: true, unique: true },
+  active: { type: Boolean, default: true },
+});
+InterestChannel.schema.index({ name: 1 }, { unique: true });
+
+export const ProductInterest = make("ProductInterest", {
+  product: ref("Product", { required: true }),
+  level: ref("InterestLevel", { required: true }),
+  channel: ref("InterestChannel", { required: true }),
+  weight: { type: Number, required: true, min: 0 },
+  comment: { type: String, trim: true, maxlength: 1000 },
+  recordedAt: { type: Date, required: true, default: Date.now },
+  createdBy: ref("User"),
+  idempotencyKey: { type: String, trim: true },
+}, { collection: "product_interests" });
+ProductInterest.schema.index({ product: 1, recordedAt: -1 });
+ProductInterest.schema.index({ channel: 1, recordedAt: -1 });
+ProductInterest.schema.index({ level: 1, recordedAt: -1 });
+ProductInterest.schema.index({ product: 1, idempotencyKey: 1 }, { unique: true, partialFilterExpression: { idempotencyKey: { $type: "string" } } });
