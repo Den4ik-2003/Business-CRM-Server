@@ -93,7 +93,7 @@ r.patch("/:productId/:interestId", canWrite, wrap(async (req,res) => {
 
 r.get("/:productId", wrap(async (req,res) => {
   if (!mongoose.isValidObjectId(req.params.productId)) throw new AppError(400,"Некоректний товар");
-  const rows = await ProductInterest.find({product:req.params.productId}).sort({recordedAt:-1}).populate("level","name weight").populate("channel","name").populate("createdBy","name").lean();
+  const rows = await ProductInterest.find({product:req.params.productId}).sort({recordedAt:-1}).limit(500).populate("level","name weight").populate("channel","name").populate("createdBy","name").lean();
   const rating = await calcRating(req.params.productId);
   res.json({items:rows.map(x=>({id:String(x._id),levelId:x.level?._id?String(x.level._id):"",channelId:x.channel?._id?String(x.channel._id):"",level:x.level?.name||"Видалений рівень",weight:x.weight,channel:x.channel?.name||"Видалений канал",comment:x.comment||"",recordedAt:x.recordedAt,createdBy:x.createdBy?.name||null})),...rating});
 }));

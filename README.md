@@ -46,8 +46,7 @@ npm test                    # тести бізнес-логіки
 
 ## API
 `/api/auth/login|logout|me` · `/api/products` (+ `/:id`, `/:id/archive|restore|history`) · `/api/inventory/movements|alerts` · `/api/attachments` · `/api/categories|suppliers|warehouses` · `/api/users` (лише owner). Усе, крім `/api/health` і входу, потребує сесії. Сервер підтримує два способи авторизації:
-- cookie `bos_token` (за замовчуванням);
-- `Authorization: Bearer <token>` — корисно для мобільних браузерів/деплоїв, де сторонні cookie блокуються. `/api/auth/login` повертає `token` у JSON разом із `user`; фронтенд має зберегти його безпечно та додавати заголовок `Authorization` до API-запитів. Не надсилайте токен у URL.
+- HttpOnly cookie `bos_token` (основний підтримуваний механізм). JWT діє до 8 годин; вихід і зміна пароля/ролі відкликають попередні сесії. Не зберігайте токени у localStorage та не передавайте їх у URL.
 
 Ролі: `owner` (усе), `manager` (змінює дані), `viewer` (лише читає).
 
@@ -80,3 +79,13 @@ npm run migrate
 Міграція створює довідники за замовчуванням (Низький/Середній/Високий/Гарячий з вагами 20/50/80/100 та базові канали Instagram, Threads, OLX, TikTok, Facebook, Telegram, Інший). Їх можна змінювати в CRM у розділі «Довідники».
 
 API: `/api/interest-levels`, `/api/interest-channels`, `/api/interests/:productId` та `/api/interests/analytics/summary`. Історія зацікавленості зберігається окремо від товарів і не втрачається при архівації товару.
+
+
+## Security hardening (2026-11)
+- Для production обов’язково задайте `JWT_SECRET` випадковим значенням щонайменше 32 символи, `CLIENT_ORIGIN` точним origin фронтенду (без шляху/кінцевого `/`) та `NODE_ENV=production`.
+- Якщо Netlify використовує `netlify/functions/api-proxy.mjs`, задайте в Netlify змінну `API_PROXY_URL` з HTTPS-адресою backend. У Render задайте `CLIENT_ORIGIN=https://<ваш-сайт>.netlify.app` і `CROSS_SITE=false` для same-origin proxy.
+- На MongoDB Atlas створіть окремого DB-користувача лише для цієї CRM, обмежте Network Access IP-адресами backend, увімкніть TLS та резервні копії. Не використовуйте адміністратора Atlas як URI застосунку.
+- Rate limiting у цьому пакеті зберігається в пам’яті одного процесу. Для кількох інстансів/production з autoscaling підключіть Redis-backed limiter.
+- У Cloudinary unsigned upload preset обмежте формати, розмір, transformations та папку завантаження; не вважайте preset секретом.
+- Локальна MongoDB у Docker опублікована лише на `127.0.0.1`; не відкривайте порт `27017` у публічний інтернет.
+- Паролі нових облікових записів мають бути щонайменше 12 символів. Після оновлення попросіть користувачів встановити довгі унікальні паролі.

@@ -12,6 +12,7 @@ export const User = make("User", {
   role: { type: String, enum: ["owner", "manager", "viewer"], default: "viewer" },
   active: { type: Boolean, default: true },
   approvalStatus: { type: String, enum: ["approved", "pending", "rejected"], default: "approved" },
+  tokenVersion: { type: Number, default: 0, select: false },
 });
 
 export const Category = make("Category", {

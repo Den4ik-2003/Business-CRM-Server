@@ -3,6 +3,7 @@ import cookieParser from "cookie-parser";
 import { config } from "./config.js";
 import { requireAuth, ownerOnly } from "./middleware/auth.js";
 import { notFound, errorHandler } from "./middleware/error.js";
+import { rateLimit, securityHeaders, csrfOriginGuard } from "./middleware/security.js";
 import auth from "./routes/auth.js";
 import users from "./routes/users.js";
 import products from "./routes/products.js";
@@ -16,7 +17,9 @@ import interests, { interestLevels, interestChannels } from "./routes/interests.
 export function createApp() {
   const app = express();
   app.disable("x-powered-by");
-  app.set("trust proxy", 1); // за проксі хостингу: правильний IP і secure-cookie
+  // Trust exactly one reverse proxy only in hosted production; do not trust arbitrary X-Forwarded-* locally.
+  if (config.isProd) app.set("trust proxy", 1);
+  app.use(securityHeaders);
   app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (origin && config.clientOrigins.includes(origin)) {
@@ -29,8 +32,12 @@ export function createApp() {
     }
     next();
   });
-  app.use(express.json({ limit: "1mb" }));
+  app.use(express.json({ limit: "256kb", strict: true }));
   app.use(cookieParser());
+  app.use(csrfOriginGuard);
+  app.use("/api", rateLimit({ windowMs: 60_000, max: 180 }));
+  app.use("/api/auth/login", rateLimit({ windowMs: 15 * 60_000, max: 10, message: "Забагато спроб входу. Спробуйте пізніше", keyGenerator: (req) => `${req.ip}:${String(req.body?.email || "unknown").toLowerCase()}` }));
+  app.use("/api/auth/register", rateLimit({ windowMs: 60 * 60_000, max: 5 }));
   app.get("/api/health", (_q, res) => res.json({ ok: true }));
   app.use("/api/auth", auth);
   app.use("/api", requireAuth);

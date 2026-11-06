@@ -6,13 +6,14 @@ import { AppError } from "../lib/errors.js";
 export const COOKIE = "bos_token";
 
 export const signToken = (user) =>
-  jwt.sign({ sub: String(user._id) }, config.jwtSecret, { expiresIn: "7d" });
+  jwt.sign({ sub: String(user._id), sv: Number(user.tokenVersion || 0) }, config.jwtSecret, { expiresIn: "8h", issuer: "business-crm", audience: "business-crm-web" });
 
 export const cookieOptions = {
   httpOnly: true,
   sameSite: config.crossSite ? "none" : "lax",
   secure: config.isProd || config.crossSite,
-  maxAge: 7 * 24 * 3600 * 1000,
+  maxAge: 8 * 3600 * 1000,
+  path: "/",
 };
 
 export async function requireAuth(req, _res, next) {
@@ -20,17 +21,18 @@ export async function requireAuth(req, _res, next) {
     // Cookies are convenient for same-site deployments; Bearer also works when
     // mobile browsers block cross-site cookies or the frontend uses token auth.
     const authorization = req.get("authorization") || "";
-    const bearer = authorization.match(/^Bearer\\s+(.+)$/i)?.[1];
+    const bearer = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
     const token = req.cookies?.[COOKIE] || bearer;
     if (!token) throw new AppError(401, "Потрібно увійти в систему");
     let payload;
     try {
-      payload = jwt.verify(token, config.jwtSecret);
+      payload = jwt.verify(token, config.jwtSecret, { issuer: "business-crm", audience: "business-crm-web", algorithms: ["HS256"] });
     } catch {
       throw new AppError(401, "Сесія недійсна, увійдіть знову");
     }
-    const user = await User.findById(payload.sub);
-    if (!user || !user.active) throw new AppError(401, "Користувача не знайдено або вимкнено");
+    if (typeof payload.sub !== "string" || !/^[a-f0-9]{24}$/i.test(payload.sub)) throw new AppError(401, "Сесія недійсна, увійдіть знову");
+    const user = await User.findById(payload.sub).select("+tokenVersion");
+    if (!user || !user.active || Number(user.tokenVersion || 0) !== Number(payload.sv || 0)) throw new AppError(401, "Користувача не знайдено або вимкнено");
     req.user = user;
     next();
   } catch (e) {

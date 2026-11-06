@@ -20,7 +20,9 @@ export function errorHandler(err, _req, res, _next) {
     return res.status(409).json({ error: `Запис із таким значенням уже існує (${field})` });
   }
   if (err?.name === "CastError") return res.status(400).json({ error: "Некоректний ідентифікатор" });
-  if (err?.name === "MulterError") return res.status(400).json({ error: err.message });
-  console.error(err);
+  if (err?.name === "MulterError") return res.status(400).json({ error: "Помилка завантаження файлу" });
+  if (err?.name === "ValidationError") return res.status(400).json({ error: "Перевірте введені дані" });
+  // Avoid logging raw database/driver errors: they may contain query values or customer data.
+  console.error("Unhandled API error:", err?.name || "Error");
   res.status(500).json({ error: "Внутрішня помилка сервера" });
 }
