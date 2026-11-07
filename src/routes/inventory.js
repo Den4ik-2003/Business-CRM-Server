@@ -2,7 +2,7 @@ import { Router } from "express";
 import mongoose from "mongoose";
 import { z } from "zod";
 import { InventoryMovement, Product } from "../models/index.js";
-import { wrap } from "../lib/errors.js";
+import { wrap, AppError } from "../lib/errors.js";
 import { canWrite } from "../middleware/auth.js";
 import { dec } from "../lib/money.js";
 import { applyMovement } from "../services/inventory.js";
@@ -85,6 +85,30 @@ r.patch("/movements/:id", canWrite, wrap(async (req,res) => {
   const movement=await InventoryMovement.findByIdAndUpdate(req.params.id,{$set:body},{new:true,runValidators:true}).populate("product","name sku").populate("user","name").lean();
   if(!movement) return res.status(404).json({error:"Операцію не знайдено"});
   res.json({movement:ser(movement)});
+}));
+
+
+r.delete("/movements/:id", canWrite, wrap(async (req,res) => {
+  if (!oid.safeParse(req.params.id).success) return res.status(400).json({error:"Некоректний номер операції"});
+  const movement = await InventoryMovement.findById(req.params.id);
+  if (!movement) throw new AppError(404, "Операцію не знайдено");
+  if (movement.relatedOrder || ["sale", "reserve", "release", "shipment"].includes(movement.type))
+    throw new AppError(409, "Операції, пов’язані із замовленнями або резервом, не можна видаляти з журналу.");
+  const latest = await InventoryMovement.findOne({product:movement.product}).sort({createdAt:-1,_id:-1});
+  if (!latest || String(latest._id) !== String(movement._id))
+    throw new AppError(409, "Можна видалити лише останню операцію цього товару. Спочатку скасуйте новіші рухи.");
+  const product = await Product.findById(movement.product);
+  if (!product || product.stock.onHand !== movement.balanceAfter)
+    throw new AppError(409, "Поточний залишок уже відрізняється. Видалення може порушити історію.");
+  const restoredOnHand = product.stock.onHand - movement.delta;
+  const restoredReserved = product.stock.reserved - movement.reservedDelta;
+  if (restoredOnHand < 0 || restoredReserved < 0 || restoredReserved > restoredOnHand)
+    throw new AppError(409, "Неможливо безпечно скасувати цю операцію.");
+  product.stock.onHand = restoredOnHand;
+  product.stock.reserved = restoredReserved;
+  await product.save();
+  await InventoryMovement.deleteOne({_id:movement._id});
+  res.json({ok:true, productId:String(product._id), onHand:restoredOnHand});
 }));
 
 // Сповіщення по складу. Кожен тип рахується окремим серверним запитом з ліміту 50 записів.
