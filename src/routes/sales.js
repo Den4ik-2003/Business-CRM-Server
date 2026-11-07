@@ -3,15 +3,16 @@ import { z } from "zod";
 import { Product, Sale, Expense } from "../models/index.js";
 import { wrap } from "../lib/errors.js";
 import { canWrite } from "../middleware/auth.js";
-import { applyMovement } from "../services/inventory.js";
+import { applyMovement, applyInSession } from "../services/inventory.js";
+import { withTx } from "../lib/tx.js";
 import { dec } from "../lib/money.js";
 const r = Router();
 const oid = z.string().regex(/^[a-f\d]{24}$/i);
 const STATUSES = ["new","shipped","at_branch","collected","refused"];
-const serialize = s => ({ id:String(s._id), items:s.items.map(i=>({product:i.product?._id?{id:String(i.product._id),name:i.product.name,sku:i.product.sku}:{id:String(i.product)},quantity:i.quantity,unitPrice:dec(i.unitPrice),unitCost:dec(i.unitCost),total:dec(i.total)})),total:dec(s.total),currency:s.currency,date:s.date,note:s.note||"",status:s.status,channel:s.channel||"Інший",shippedAt:s.shippedAt||null,reminderAt:s.reminderAt||null,reminderCount:s.reminderCount||0,stockDeducted:!!s.stockDeducted, user:s.user?{id:String(s.user._id||s.user),name:s.user.name||""}:null, statusManuallySet:!!s.statusManuallySet });
+const serialize = s => ({ id:String(s._id), items:s.items.map(i=>({product:i.product?._id?{id:String(i.product._id),name:i.product.name,sku:i.product.sku}:{id:String(i.product)},quantity:i.quantity,unitPrice:dec(i.unitPrice),unitCost:dec(i.unitCost),total:dec(i.total)})),total:dec(s.total),currency:s.currency,date:s.date,note:s.note||"",status:s.status,channel:s.channel||"Інший",shippedAt:s.shippedAt||null,reminderAt:s.reminderAt||null,reminderCount:s.reminderCount||0,createdStockDeducted:!!s.createdStockDeducted,stockDeducted:!!s.stockDeducted,collectedAt:s.collectedAt||null,createdAt:s.createdAt||null, user:s.user?{id:String(s.user._id||s.user),name:s.user.name||""}:null, statusManuallySet:!!s.statusManuallySet });
 async function markCollected(sale, user) {
  if (!sale.stockDeducted) {
-   for (const item of sale.items) await applyMovement({productId:String(item.product),type:"sale",quantity:item.quantity,reason:"Замовлення отримано покупцем",comment:`Продаж ${sale._id}`,user,idempotencyKey:`sale-${sale._id}-${item.product}`});
+   for (const item of sale.items) await applyMovement({productId:String(item.product),type:"sale",quantity:item.quantity,reason:"Замовлення отримано покупцем (повторне списання)",comment:`Продаж ${sale._id}`,user,idempotencyKey:`sale-collected-${sale._id}-${item.product}`});
    sale.stockDeducted=true;
  }
  sale.collectedAt=sale.collectedAt || new Date();
@@ -31,8 +32,15 @@ r.post("/",canWrite,wrap(async(req,res)=>{
  const d=z.object({items:z.array(z.object({productId:oid,quantity:z.coerce.number().int().positive(),unitPrice:z.coerce.number().nonnegative()})).min(1),date:z.coerce.date().optional(),note:z.string().max(1000).optional(),channel:z.string().trim().min(1).max(80).default("Інший")}).parse(req.body);
  const prepared=[];let total=0;
  for(const item of d.items){const p=await Product.findById(item.productId);if(!p||p.status==="archived")return res.status(400).json({error:"Товар не знайдено або архівний"});const unitCost=[p.costs?.purchasePrice,p.costs?.supplierShipping,p.costs?.customs,p.costs?.packaging,p.costs?.other].reduce((sum,v)=>sum+Number(dec(v)||0),0);const lineTotal=item.quantity*item.unitPrice;total+=lineTotal;prepared.push({product:p,quantity:item.quantity,unitPrice:item.unitPrice,unitCost,total:lineTotal});}
- const sale=await Sale.create({items:prepared.map(i=>({product:i.product._id,quantity:i.quantity,unitPrice:i.unitPrice,unitCost:i.unitCost,total:i.total})),total,date:d.date||new Date(),note:d.note,channel:d.channel,status:"new",user:req.user._id});
- await sale.populate("items.product","name sku");res.status(201).json({sale:serialize(sale)});
+ const saleId=await withTx(async session=>{
+   const [sale]=await Sale.create([{items:prepared.map(i=>({product:i.product._id,quantity:i.quantity,unitPrice:i.unitPrice,unitCost:i.unitCost,total:i.total})),total,date:d.date||new Date(),note:d.note,channel:d.channel,status:"new",user:req.user._id,createdStockDeducted:false}],{session});
+   for (const item of prepared) await applyInSession(session,{productId:String(item.product._id),type:"sale",quantity:item.quantity,reason:"Списання при створенні продажу",comment:`Продаж ${sale._id}`,user:req.user,idempotencyKey:`sale-created-${sale._id}-${item.product._id}`});
+   sale.createdStockDeducted=true;
+   await sale.save({session});
+   return sale._id;
+ });
+ const sale=await Sale.findById(saleId).populate("items.product","name sku").populate("user","name");
+ res.status(201).json({sale:serialize(sale)});
 }));
 r.patch("/:id/status",canWrite,wrap(async(req,res)=>{
  const d=z.object({status:z.enum(STATUSES)}).parse(req.body);

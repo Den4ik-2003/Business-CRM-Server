@@ -47,7 +47,7 @@ const calcRating = async productId => {
 
 r.post("/:productId", canWrite, wrap(async (req,res) => {
   if (!mongoose.isValidObjectId(req.params.productId)) throw new AppError(400,"Некоректний товар");
-  const body = z.object({level:id,channel:id,comment:z.string().trim().max(1000).optional().default(""),idempotencyKey:z.string().trim().min(8).max(100).optional()}).parse(req.body);
+  const body = z.object({level:id,channel:id,comment:z.string().trim().max(1000).optional().default(""),recordedAt:z.coerce.date().optional(),idempotencyKey:z.string().trim().min(8).max(100).optional()}).parse(req.body);
   if (body.idempotencyKey) { const existing = await ProductInterest.findOne({product:req.params.productId,idempotencyKey:body.idempotencyKey}); if(existing){ const rating=await calcRating(req.params.productId); return res.status(200).json({item:{id:String(existing._id)},...rating}); } }
   const [product,level,channel] = await Promise.all([
     Product.findById(req.params.productId),
@@ -57,7 +57,7 @@ r.post("/:productId", canWrite, wrap(async (req,res) => {
   if (!product) throw new AppError(404,"Товар не знайдено");
   if (!level) throw new AppError(400,"Оберіть доступний рівень зацікавленості");
   if (!channel) throw new AppError(400,"Оберіть доступний канал");
-  const doc = await ProductInterest.create({product:product._id,level:level._id,channel:channel._id,weight:level.weight,comment:body.comment,createdBy:req.user._id,recordedAt:new Date(),idempotencyKey:body.idempotencyKey});
+  const doc = await ProductInterest.create({product:product._id,level:level._id,channel:channel._id,weight:level.weight,comment:body.comment,createdBy:req.user._id,recordedAt:body.recordedAt || new Date(),idempotencyKey:body.idempotencyKey});
   const rating = await calcRating(product._id);
   product.interestCount = rating.interestCount;
   await product.save();

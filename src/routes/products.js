@@ -60,9 +60,11 @@ r.get(
     const q = listQuery.parse(req.query);
     const filter = buildFilter(q);
     const sort = { [SORT[q.sort]]: q.dir === "asc" ? 1 : -1, _id: 1 };
+    const exactId = q.q && mongoose.isValidObjectId(q.q) ? new mongoose.Types.ObjectId(q.q) : null;
+    const exactFirst = q.q ? [{ $addFields: { __exactMatch: { $cond: [{ $or: [{ $eq: ["$sku", q.q] }, { $eq: ["$barcode", q.q] }, ...(exactId ? [{ $eq: ["$_id", exactId] }] : [])] }, 0, 1] } } }, { $sort: { __exactMatch: 1, ...sort } }] : [{ $sort: sort }];
     const [total, docs] = await Promise.all([
       Product.countDocuments(filter),
-      Product.find(filter).sort(sort).skip((q.page - 1) * q.limit).limit(q.limit).populate(POPULATE).lean(),
+      Product.aggregate([{ $match: filter }, ...exactFirst, { $skip: (q.page - 1) * q.limit }, { $limit: q.limit }]).then(rows => Product.populate(rows, POPULATE)),
     ]);
     const ids = docs.map(d => d._id);
     const stats = await ProductInterest.aggregate([{ $match: { product: { $in: ids } } }, { $group: { _id: "$product", count: { $sum: 1 }, avgWeight: { $avg: "$weight" } } }]);

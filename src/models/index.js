@@ -192,6 +192,7 @@ export const Sale = make("Sale", {
   reminderAt: Date,
   reminderCount: { type: Number, default: 0 },
   collectedAt: Date,
+  createdStockDeducted: { type: Boolean, default: false },
   stockDeducted: { type: Boolean, default: false },
   user: ref("User"),
 }, { collection: "sales" });

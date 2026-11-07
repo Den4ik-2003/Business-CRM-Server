@@ -78,6 +78,15 @@ r.get(
   })
 );
 
+
+r.patch("/movements/:id", canWrite, wrap(async (req,res) => {
+  if (!oid.safeParse(req.params.id).success) return res.status(400).json({error:"Некоректний номер операції"});
+  const body=z.object({reason:z.string().trim().max(200).optional(),comment:z.string().trim().max(1000).optional()}).strict().parse(req.body);
+  const movement=await InventoryMovement.findByIdAndUpdate(req.params.id,{$set:body},{new:true,runValidators:true}).populate("product","name sku").populate("user","name").lean();
+  if(!movement) return res.status(404).json({error:"Операцію не знайдено"});
+  res.json({movement:ser(movement)});
+}));
+
 // Сповіщення по складу. Кожен тип рахується окремим серверним запитом з ліміту 50 записів.
 r.get(
   "/alerts",
